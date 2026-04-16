@@ -1,0 +1,66 @@
+name: Instagram Comment Auto-Reply Bot
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      post_url:
+        description: 'Instagram post URL (e.g., https://instagram.com/p/ABC123)'
+        required: false
+        type: string
+      keyword:
+        description: 'Keyword to trigger reply'
+        required: false
+        type: string
+      reply_text:
+        description: 'Reply text to post'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+      
+      - name: Run Instagram comment bot
+        id: bot
+        env:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          INPUT_POST_URL: ${{ github.event.inputs.post_url }}
+          INPUT_KEYWORD: ${{ github.event.inputs.keyword }}
+          INPUT_REPLY: ${{ github.event.inputs.reply_text }}
+          GITHUB_ACTIONS: true
+          GITHUB_OUTPUT: ${{ env.GITHUB_OUTPUT }}
+        run: |
+          python agent.py
+      
+      - name: Commit and push changes
+        if: steps.bot.outputs.commit_needed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git pull --rebase origin ${{ github.ref_name }}
+          git add rules.json processed_comments.json
+          git diff --staged --quiet || git commit -m "Update comment processing data [skip ci]"
+          git push origin ${{ github.ref_name }}
